@@ -1,0 +1,18 @@
+/target
+
+# Credentials and tokens - NEVER commit these
+credentials.json
+token_cache.json
+
+# Environment files with secrets
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
