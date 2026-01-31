@@ -7,6 +7,8 @@ pub struct CalendarEvent {
     pub title: String,
     pub description: Option<String>,
     pub location: Option<String>,
+    pub organization: Option<String>,
+    pub purchased: bool,
     pub start_date: NaiveDate,
     pub start_time: Option<NaiveTime>,
     pub end_date: NaiveDate,

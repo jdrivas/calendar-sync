@@ -65,6 +65,8 @@ fn parse_record(record: CsvRecord, row_num: usize) -> Result<CalendarEvent> {
         title: record.title,
         description: record.description.filter(|s| !s.is_empty()),
         location: record.location.filter(|s| !s.is_empty()),
+        organization: None, // CSV doesn't have organization column
+        purchased: false,   // CSV doesn't have purchased column
         start_date,
         start_time,
         end_date,

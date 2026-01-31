@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use chrono::{TimeZone, Utc};
+use chrono::{NaiveDate, TimeZone, Utc};
+use chrono_tz::America::Los_Angeles;
 use google_calendar3::api::Event;
 use google_calendar3::api::EventDateTime;
 use google_calendar3::CalendarHub;
@@ -114,20 +115,25 @@ fn convert_to_google_event(event: &CalendarEvent) -> Event {
             time_zone: None,
         });
     } else {
-        // Timed event - use date_time with UTC DateTime
+        // Timed event - interpret naive datetime as Pacific time, convert to UTC
         let start_dt = event.start_datetime();
         let end_dt = event.end_datetime();
 
-        // Convert NaiveDateTime to DateTime<Utc>
-        // Note: This assumes the input times are in UTC. For proper timezone handling,
-        // you'd want to use chrono-tz and convert from local time.
-        let start_utc = Utc.from_utc_datetime(&start_dt);
-        let end_utc = Utc.from_utc_datetime(&end_dt);
+        // Interpret the naive datetime as Pacific time and convert to UTC
+        let start_pacific = Los_Angeles.from_local_datetime(&start_dt)
+            .single()
+            .unwrap_or_else(|| Los_Angeles.from_local_datetime(&start_dt).latest().unwrap());
+        let end_pacific = Los_Angeles.from_local_datetime(&end_dt)
+            .single()
+            .unwrap_or_else(|| Los_Angeles.from_local_datetime(&end_dt).latest().unwrap());
+
+        let start_utc = start_pacific.with_timezone(&Utc);
+        let end_utc = end_pacific.with_timezone(&Utc);
 
         google_event.start = Some(EventDateTime {
             date: None,
             date_time: Some(start_utc),
-            time_zone: Some("America/Los_Angeles".to_string()), // TODO: make configurable
+            time_zone: Some("America/Los_Angeles".to_string()),
         });
 
         google_event.end = Some(EventDateTime {
@@ -138,6 +144,132 @@ fn convert_to_google_event(event: &CalendarEvent) -> Event {
     }
 
     google_event
+}
+
+/// Represents a Google Calendar event that was found
+#[derive(Debug, Clone)]
+pub struct FoundCalendarEvent {
+    pub id: String,
+    pub title: String,
+    pub date: NaiveDate,
+    pub location: Option<String>,
+}
+
+/// Find Google Calendar events that match the given CalendarEvents (by title and date)
+pub async fn find_matching_events(
+    hub: &Hub,
+    calendar_id: &str,
+    events: &[CalendarEvent],
+) -> Result<Vec<(CalendarEvent, FoundCalendarEvent)>> {
+    if events.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Get date range from events
+    let min_date = events.iter().map(|e| e.start_date).min().unwrap();
+    let max_date = events.iter().map(|e| e.start_date).max().unwrap();
+
+    // Fetch all calendar events in the date range
+    let time_min = Utc.from_utc_datetime(&min_date.and_hms_opt(0, 0, 0).unwrap());
+    let time_max = Utc.from_utc_datetime(&max_date.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap());
+
+    let mut all_gcal_events = Vec::new();
+    let mut page_token: Option<String> = None;
+
+    loop {
+        let mut request = hub
+            .events()
+            .list(calendar_id)
+            .time_min(time_min)
+            .time_max(time_max)
+            .single_events(true)
+            .max_results(2500);
+
+        if let Some(token) = &page_token {
+            request = request.page_token(token);
+        }
+
+        let (_, event_list) = request
+            .doit()
+            .await
+            .context("Failed to list calendar events")?;
+
+        if let Some(items) = event_list.items {
+            all_gcal_events.extend(items);
+        }
+
+        page_token = event_list.next_page_token;
+        if page_token.is_none() {
+            break;
+        }
+    }
+
+    tracing::info!("Found {} events in Google Calendar within date range", all_gcal_events.len());
+
+    // Match Coda events to Google Calendar events by title and date
+    let mut matches = Vec::new();
+
+    for coda_event in events {
+        for gcal_event in &all_gcal_events {
+            let gcal_title = gcal_event.summary.as_deref().unwrap_or("");
+            let gcal_date = extract_event_date(gcal_event);
+
+            if let Some(date) = gcal_date {
+                // Match by title (case-insensitive) and date
+                if gcal_title.to_lowercase() == coda_event.title.to_lowercase() 
+                    && date == coda_event.start_date 
+                {
+                    if let Some(id) = &gcal_event.id {
+                        matches.push((
+                            coda_event.clone(),
+                            FoundCalendarEvent {
+                                id: id.clone(),
+                                title: gcal_title.to_string(),
+                                date,
+                                location: gcal_event.location.clone(),
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(matches)
+}
+
+/// Extract the date from a Google Calendar event
+fn extract_event_date(event: &Event) -> Option<NaiveDate> {
+    if let Some(start) = &event.start {
+        // Try date first (all-day events)
+        if let Some(date) = start.date {
+            return Some(date);
+        }
+        // Try date_time (timed events)
+        if let Some(dt) = &start.date_time {
+            return Some(dt.date_naive());
+        }
+    }
+    None
+}
+
+/// Delete events from Google Calendar
+pub async fn delete_events(
+    hub: &Hub,
+    calendar_id: &str,
+    event_ids: &[String],
+) -> Result<usize> {
+    let mut deleted = 0;
+    for event_id in event_ids {
+        hub.events()
+            .delete(calendar_id, event_id)
+            .doit()
+            .await
+            .with_context(|| format!("Failed to delete event: {}", event_id))?;
+        deleted += 1;
+        tracing::info!("Deleted event: {}", event_id);
+    }
+    Ok(deleted)
 }
 
 fn get_credentials_path() -> Result<PathBuf> {
