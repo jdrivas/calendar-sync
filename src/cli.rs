@@ -11,7 +11,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Import events from a CSV file to Google Calendar
+    /// Import events from a CSV file to Google Calendar (use --dry-run to preview)
     Import {
         /// Path to the CSV file containing events
         #[arg(short, long)]
@@ -21,8 +21,8 @@ pub enum Commands {
         #[arg(short, long, default_value = "primary")]
         calendar_id: String,
 
-        /// Dry run - parse and display events without creating them
-        #[arg(long, default_value = "false")]
+        /// Preview events without creating them in Google Calendar
+        #[arg(short = 'n', long)]
         dry_run: bool,
     },
 

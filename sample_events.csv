@@ -1,7 +1,3 @@
 title,description,location,start_date,start_time,end_date,end_time
-Team Meeting,Weekly sync with the team,Conference Room A,2024-02-15,10:00,2024-02-15,11:00
-Tech Conference,Annual technology conference,Convention Center,2024-03-01,,2024-03-03,
-Doctor Appointment,Annual checkup,123 Medical Plaza,2024-02-20,14:30,2024-02-20,15:30
-Project Deadline,Final submission due,,2024-02-28,,,
-Lunch with Client,Discuss Q2 plans,Downtown Cafe,2024-02-18,12:00,2024-02-18,13:30
-Workshop,Rust Programming Workshop,Tech Hub,2024-03-10,09:00,2024-03-10,17:00
+Event 1,"This is the first Event detail at https://www.sfsymphony.org/calendar","Davies Hall 201 Van Ness Avenue, San Francisco CA. 94102",2026-01-31,10:00,2026-01-31,11:00
+Event 2,"This is the second event at: https://calperformances.org","Hertz Concert Hall 101 Cross Sproul Path, Berkeley CA. 94704",2026-01-31,15:00,2026-01-31,17:00

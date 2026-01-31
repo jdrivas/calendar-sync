@@ -9,6 +9,14 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::cli::{Cli, Commands};
 
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
@@ -33,9 +41,20 @@ async fn main() -> Result<()> {
 
             if dry_run {
                 tracing::info!("Dry run mode - not creating events");
+                println!("\n{:<40} {:<12} {:<8} {:<12} {:<8} {:<20}", 
+                    "SUMMARY", "START DATE", "START", "END DATE", "END", "LOCATION");
+                println!("{}", "-".repeat(100));
                 for event in &events {
-                    println!("{}", event);
+                    println!("{:<40} {:<12} {:<8} {:<12} {:<8} {:<20}",
+                        truncate(&event.title, 38),
+                        event.start_date.format("%Y-%m-%d"),
+                        event.start_time.map(|t| t.format("%H:%M").to_string()).unwrap_or_else(|| "all-day".to_string()),
+                        event.end_date.format("%Y-%m-%d"),
+                        event.end_time.map(|t| t.format("%H:%M").to_string()).unwrap_or_else(|| "all-day".to_string()),
+                        event.location.as_deref().map(|l| truncate(l, 18)).unwrap_or_default(),
+                    );
                 }
+                println!();
                 return Ok(());
             }
 
